@@ -265,6 +265,7 @@ export const getDownloadStreamUrl = async ({
   subtitleStreamIndex = undefined,
   mediaSourceId,
   deviceId,
+  videoCodec, // optional codec preference (e.g. "h264" or "hevc")
 }: {
   api: Api | null | undefined;
   item: BaseItemDto | null | undefined;
@@ -274,6 +275,7 @@ export const getDownloadStreamUrl = async ({
   subtitleStreamIndex?: number;
   mediaSourceId?: string | null;
   deviceId?: string | null;
+  videoCodec?: string;
 }): Promise<{
   url: string | null;
   sessionId: string | null;
@@ -284,6 +286,31 @@ export const getDownloadStreamUrl = async ({
     return null;
   }
 
+  // Build a device profile for download. If a videoCodec is provided, prefer it
+  // by overriding the VideoCodec on the TranscodingProfiles for video.
+  const deviceProfileForDownload = (() => {
+    try {
+      // deep clone the download profile
+      const dp: any = JSON.parse(JSON.stringify(download));
+      if (videoCodec && Array.isArray(dp.TranscodingProfiles)) {
+        dp.TranscodingProfiles = dp.TranscodingProfiles.map((tp: any) => {
+          // If it looks like a video transcoding profile, override VideoCodec
+          if (tp.Type === "Video" || String(tp.Container || "").includes("mp4") || String(tp.Container || "").includes("ts")) {
+            return {
+              ...tp,
+              VideoCodec: String(videoCodec),
+            };
+          }
+          return tp;
+        });
+      }
+      return dp;
+    } catch (e) {
+      console.warn("Error cloning download device profile:", e);
+      return download;
+    }
+  })();
+
   const res = await getMediaInfoApi(api).getPlaybackInfo(
     {
       itemId: item.Id!,
@@ -292,7 +319,7 @@ export const getDownloadStreamUrl = async ({
       method: "POST",
       data: {
         userId,
-        deviceProfile: download,
+        deviceProfile: deviceProfileForDownload,
         subtitleStreamIndex,
         startTimeTicks: 0,
         isPlayback: true,

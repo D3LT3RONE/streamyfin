@@ -16,6 +16,7 @@ export const getDownloadUrl = async ({
   audioStreamIndex,
   subtitleStreamIndex,
   deviceId,
+  videoCodec, // optional preference forwarded from UI
 }: {
   api: Api;
   item: BaseItemDto;
@@ -23,23 +24,25 @@ export const getDownloadUrl = async ({
   mediaSource: MediaSourceInfo;
   maxBitrate: Bitrate;
   audioStreamIndex: number;
+  subtitle_stream_index: number;
   subtitleStreamIndex: number;
   deviceId: string;
+  videoCodec?: string;
 }): Promise<{
   url: string | null;
   mediaSource: MediaSourceInfo | null;
 } | null> => {
+  // First, ask for stream info using a "native" device profile to see if direct download is possible
   const streamDetails = await getStreamUrl({
     api,
     item,
     userId,
     startTimeTicks: 0,
-    mediaSourceId: mediaSource.Id,
     maxStreamingBitrate: maxBitrate.value,
+    deviceProfile: generateDeviceProfile(),
     audioStreamIndex,
     subtitleStreamIndex,
-    deviceId,
-    deviceProfile: generateDeviceProfile(),
+    mediaSourceId: mediaSource.Id,
   });
 
   if (maxBitrate.key === "Max" && !streamDetails?.mediaSource?.TranscodingUrl) {
@@ -50,6 +53,7 @@ export const getDownloadUrl = async ({
     };
   }
 
+  // Otherwise request a download stream URL — forward videoCodec preference if provided
   const downloadStreamDetails = await getDownloadStreamUrl({
     api,
     item,
@@ -59,6 +63,7 @@ export const getDownloadUrl = async ({
     maxStreamingBitrate: maxBitrate.value,
     audioStreamIndex,
     subtitleStreamIndex,
+    videoCodec,
   });
 
   return {
